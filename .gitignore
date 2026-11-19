@@ -1,0 +1,25 @@
+# Environment variables & secrets
+.env
+backend/.env
+*.env
+
+# Python caches & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Uploaded student files & scans
+backend/uploads/scans/*
+!backend/uploads/scans/.gitkeep
+
+# SQLite database local files
+backend/database/*.db
+database/*.db
+
+# Editor & OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
