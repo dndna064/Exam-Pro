@@ -43,12 +43,49 @@ def create_app(config_class=Config):
 
     @app.get("/uploads/<path:filename>")
     def serve_upload(filename):
-        resp = send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+        clean_name = filename.strip("/\\")
+        base_name = os.path.basename(clean_name)
+
+        candidates = [
+            app.config.get("UPLOAD_FOLDER"),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "uploads")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "backend", "uploads")),
+            os.path.abspath(os.path.join(os.getcwd(), "uploads")),
+            os.path.abspath(os.path.join(os.getcwd(), "backend", "uploads")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "uploads", "scans")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads", "scans")),
+        ]
+
+        found_path = None
+        for c in candidates:
+            if not c:
+                continue
+            p1 = os.path.abspath(os.path.join(c, clean_name))
+            if os.path.isfile(p1):
+                found_path = p1
+                break
+            p2 = os.path.abspath(os.path.join(c, base_name))
+            if os.path.isfile(p2):
+                found_path = p2
+                break
+
+        if not found_path:
+            return jsonify({"error": f"Upload file not found: {filename}"}), 404
+
+        target_dir = os.path.dirname(found_path)
+        target_file = os.path.basename(found_path)
+        resp = send_from_directory(target_dir, target_file)
         resp.headers["Access-Control-Allow-Origin"] = "*"
         resp.headers["X-Frame-Options"] = "ALLOWALL"
         resp.headers["Content-Disposition"] = "inline"
-        if filename.lower().endswith(".pdf"):
+        lower = target_file.lower()
+        if lower.endswith(".pdf"):
             resp.headers["Content-Type"] = "application/pdf"
+        elif lower.endswith(".jpg") or lower.endswith(".jpeg"):
+            resp.headers["Content-Type"] = "image/jpeg"
+        elif lower.endswith(".png"):
+            resp.headers["Content-Type"] = "image/png"
         return resp
 
     @app.get("/api/health")

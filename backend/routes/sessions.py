@@ -391,6 +391,17 @@ def prepare_eval(sid):
     if scanned_url and not existing_scan and desc_qs:
         fname = os.path.basename(scanned_url)
         fpath = os.path.join(current_app.config["UPLOAD_FOLDER"], "scans", fname)
+        if not os.path.exists(fpath):
+            for c in [
+                os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads", "scans")),
+                os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "uploads", "scans")),
+                os.path.abspath(os.path.join(os.getcwd(), "uploads", "scans")),
+                os.path.abspath(os.path.join(os.getcwd(), "backend", "uploads", "scans")),
+            ]:
+                cand = os.path.join(c, fname)
+                if os.path.exists(cand):
+                    fpath = cand
+                    break
         if os.path.exists(fpath):
             ext = os.path.splitext(fname)[1].lower()
             mime = "application/pdf" if ext == ".pdf" else "image/jpeg"
