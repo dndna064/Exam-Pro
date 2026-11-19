@@ -155,7 +155,7 @@ def _ai_eval_descriptive(question_text: str, student_answer: str, theory_marks: 
     model = cfg.get("GEMINI_MODEL", "gemini-3.8-flash")
 
     keys_to_try = [k for k in [primary_key, backup_key] if k]
-    models_to_try = [model, "gemini-flash-latest", "gemini-3.5-flash", "gemini-3.1-flash-lite"]
+    models_to_try = [model, "gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-flash-latest"]
     seen_models = []
     for m in models_to_try:
         if m and m not in seen_models:
@@ -190,12 +190,15 @@ def _ai_eval_descriptive(question_text: str, student_answer: str, theory_marks: 
     payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
 
     for api_key in keys_to_try:
+        key_rejected = False
         for m in seen_models:
+            if key_rejected:
+                break
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={api_key}"
             for attempt in range(2):
                 try:
                     req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-                    with urllib.request.urlopen(req, timeout=30) as resp:
+                    with urllib.request.urlopen(req, timeout=15) as resp:
                         res = json.loads(resp.read().decode("utf-8"))
                         candidates = res.get("candidates", [])
                         if candidates and candidates[0].get("content", {}).get("parts"):
@@ -208,14 +211,17 @@ def _ai_eval_descriptive(question_text: str, student_answer: str, theory_marks: 
                                 fb = data.get("evaluation_summary") or data.get("feedback") or "* Theory evaluated by AI."
                                 return score, fb
                 except urllib.error.HTTPError as e:
-                    if e.code in (400, 403, 404):
+                    if e.code == 403:
+                        key_rejected = True
+                        break
+                    if e.code in (400, 404):
                         break
                     if e.code in (429, 503) and attempt == 0:
-                        time.sleep(2)
+                        time.sleep(1)
                         continue
                 except Exception:
                     if attempt == 0:
-                        time.sleep(1.5)
+                        time.sleep(1)
                         continue
 
     # Heuristic fallback if Gemini API is unreachable or under high load
@@ -433,15 +439,18 @@ def prepare_eval(sid):
     db.commit()
 
     # 3. Auto-evaluate theory for descriptive questions with Gemini AI (if not already evaluated)
-    for q in desc_qs:
-        ans = db.execute("SELECT * FROM answers WHERE session_id=? AND question_id=?", (sid, q["id"])).fetchone()
-        if ans and ans["answer_text"] and ans["auto_score"] is None and ans["manual_score"] is None:
-            theory_max = float(q["theory_marks"] if q["has_theory"] else q["marks"])
-            if theory_max > 0:
-                ai_score, fb = _ai_eval_descriptive(q["question_text"], ans["answer_text"], theory_max)
-                db.execute("""UPDATE answers SET auto_score=?, theory_score=?, marks_awarded=?, feedback=?, evaluated_at=datetime('now') WHERE id=?""",
-                    (ai_score, ai_score, ai_score, fb, ans["id"]))
-    db.commit()
+    try:
+        for q in desc_qs:
+            ans = db.execute("SELECT * FROM answers WHERE session_id=? AND question_id=?", (sid, q["id"])).fetchone()
+            if ans and ans["answer_text"] and ans["auto_score"] is None and ans["manual_score"] is None:
+                theory_max = float(q["theory_marks"] or q["marks"] or 0)
+                if theory_max > 0:
+                    ai_score, fb = _ai_eval_descriptive(q["question_text"], ans["answer_text"], theory_max)
+                    db.execute("""UPDATE answers SET auto_score=?, theory_score=?, marks_awarded=?, feedback=?, evaluated_at=datetime('now') WHERE id=?""",
+                        (ai_score, ai_score, ai_score, fb, ans["id"]))
+        db.commit()
+    except Exception as e:
+        print("AI evaluation error during prepare_eval:", e)
 
     # 4. Fetch full list of questions merged with student answers
     answers_rows = db.execute("SELECT * FROM answers WHERE session_id=?", (sid,)).fetchall()

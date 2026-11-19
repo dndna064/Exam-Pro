@@ -17,4 +17,13 @@ class Config:
     GEMINI_OCR_API_KEY   = os.getenv("GEMINI_OCR_API_KEY", "")
     GEMINI_EVAL_API_KEY  = os.getenv("GEMINI_EVAL_API_KEY", "")
     GEMINI_MODEL         = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-    UPLOAD_FOLDER        = os.getenv("UPLOAD_FOLDER", os.path.join(os.path.dirname(__file__), "uploads"))
+    _raw_upload = os.getenv("UPLOAD_FOLDER")
+    if _raw_upload:
+        if os.path.isabs(_raw_upload):
+            UPLOAD_FOLDER = _raw_upload
+        else:
+            _base = os.path.dirname(os.path.abspath(__file__))
+            _clean = _raw_upload.replace("backend/", "").replace("backend\\", "")
+            UPLOAD_FOLDER = os.path.abspath(os.path.join(_base, _clean))
+    else:
+        UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), "uploads"))

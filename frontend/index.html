@@ -1111,7 +1111,7 @@ a{text-decoration:none;color:inherit}
 </div>
 
 <script>
-const SERVER_HOST = (window.location.protocol === 'file:' || window.location.port === '3000' || window.location.port === '5500')
+const SERVER_HOST = (window.location.protocol === 'file:' || ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (window.location.port === '3000' || window.location.port === '5500')))
   ? 'http://localhost:5000'
   : window.location.origin;
 const API = `${SERVER_HOST}/api`;
@@ -3377,13 +3377,14 @@ const Staff = {
 
       if (scanUrl) {
         if (zoomControls) zoomControls.style.display = 'flex';
-        const fullUrl = (scanUrl.startsWith('http') ? '' : SERVER_HOST) + scanUrl;
+        const serverBase = API.replace(/\/api\/?$/, '');
+        const fullUrl = (scanUrl.startsWith('http') ? '' : serverBase) + scanUrl;
         if (openLink) openLink.href = fullUrl;
         const isPdf = scanUrl.toLowerCase().endsWith('.pdf');
         if (isPdf) {
           leftContent.innerHTML = `<iframe id="em-scan-frame" src="${fullUrl}" style="width:100%;height:100%;border:none;background:#fff"></iframe>`;
         } else {
-          leftContent.innerHTML = `<div style="overflow:auto;width:100%;height:100%;display:flex;align-items:flex-start;justify-content:center;padding:1rem"><img id="em-scan-img" src="${fullUrl}" style="max-width:100%;border-radius:6px;box-shadow:0 4px 15px rgba(0,0,0,.3);transition:transform 0.15s ease;transform-origin:top center;" /></div>`;
+          leftContent.innerHTML = `<div style="overflow:auto;width:100%;height:100%;display:flex;align-items:flex-start;justify-content:center;padding:1rem"><img id="em-scan-img" src="${fullUrl}" style="max-width:100%;border-radius:6px;box-shadow:0 4px 15px rgba(0,0,0,.3);transition:transform 0.15s ease;transform-origin:top center;" onerror="this.outerHTML='<div style=\\'padding:2rem;text-align:center;color:#ef4444\\'>Failed to load scan image.<br><a href=\\'${fullUrl}\\' target=\\'_blank\\' style=\\'color:#38bdf8;text-decoration:underline;margin-top:.5rem;display:inline-block\\'>Open scan in new tab ↗</a></div>'" /></div>`;
         }
       } else {
         if (zoomControls) zoomControls.style.display = 'none';
@@ -3914,8 +3915,8 @@ const Staff = {
     let scanViewerHtml = '';
     const scannedUrl = sessionDetail?.scanned_file_url;
     if (scannedUrl) {
-      const serverHost = SERVER_HOST;
-      const fullUrl = serverHost + scannedUrl;
+      const serverHost = API.replace(/\/api\/?$/, '');
+      const fullUrl = (scannedUrl.startsWith('http') ? '' : serverHost) + scannedUrl;
       const isPdf = scannedUrl.toLowerCase().endsWith('.pdf');
       scanViewerHtml = `
         <div style="margin-bottom:1.5rem;padding:1rem;background:#f0f9ff;border:2px solid #38bdf8;border-radius:10px">

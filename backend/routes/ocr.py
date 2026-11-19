@@ -42,7 +42,7 @@ def _segment_answers(raw_text: str, n_questions: int) -> dict:
 def _call_gemini_api(parts: list, primary_key: str, backup_key: str, preferred_model: str) -> str:
     """Call Google Gemini generateContent with retries, backoff, and model/key fallbacks."""
     keys_to_try = [k for k in [primary_key, backup_key] if k]
-    models_to_try = [preferred_model, "gemini-flash-latest", "gemini-3.5-flash", "gemini-3.1-flash-lite"]
+    models_to_try = [preferred_model, "gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-flash-latest"]
     seen_models = []
     for m in models_to_try:
         if m and m not in seen_models:
@@ -50,7 +50,10 @@ def _call_gemini_api(parts: list, primary_key: str, backup_key: str, preferred_m
 
     last_error = None
     for api_key in keys_to_try:
+        key_rejected = False
         for model in seen_models:
+            if key_rejected:
+                break
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
             payload = json.dumps({"contents": [{"parts": parts}]}).encode("utf-8")
 
@@ -62,7 +65,7 @@ def _call_gemini_api(parts: list, primary_key: str, backup_key: str, preferred_m
                         data=payload,
                         headers={"Content-Type": "application/json"}
                     )
-                    with urllib.request.urlopen(req, timeout=40) as resp:
+                    with urllib.request.urlopen(req, timeout=20) as resp:
                         res = json.loads(resp.read().decode("utf-8"))
                         candidates = res.get("candidates", [])
                         if candidates and candidates[0].get("content", {}).get("parts"):
@@ -71,16 +74,18 @@ def _call_gemini_api(parts: list, primary_key: str, backup_key: str, preferred_m
                 except urllib.error.HTTPError as e:
                     err_body = e.read().decode("utf-8", errors="ignore")
                     last_error = f"HTTP {e.code}: {err_body}"
-                    # 403 or 400 usually indicates key/billing/model-not-supported; switch key or model
-                    if e.code in (400, 403, 404):
+                    if e.code == 403:
+                        key_rejected = True
+                        break
+                    if e.code in (400, 404):
                         break
                     if e.code in (429, 503) and attempt == 0:
-                        time.sleep(2)
+                        time.sleep(1)
                         continue
                 except Exception as e:
                     last_error = str(e)
                     if attempt == 0:
-                        time.sleep(1.5)
+                        time.sleep(1)
                         continue
 
     raise RuntimeError(last_error or "Gemini API call failed")

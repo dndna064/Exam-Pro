@@ -1,5 +1,5 @@
 """ExamGuard Pro — Main Application Entry Point. Run: python app.py"""
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, jsonify
 from flask_cors import CORS
 import os, sys
 sys.path.insert(0, os.path.dirname(__file__))
@@ -43,18 +43,24 @@ def create_app(config_class=Config):
 
     @app.get("/uploads/<path:filename>")
     def serve_upload(filename):
-        return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+        resp = send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        resp.headers["X-Frame-Options"] = "ALLOWALL"
+        resp.headers["Content-Disposition"] = "inline"
+        if filename.lower().endswith(".pdf"):
+            resp.headers["Content-Type"] = "application/pdf"
+        return resp
 
     @app.get("/api/health")
     def health():
         return {"status": "ok", "service": "ExamGuard Pro API", "version": "1.0.0"}
 
     @app.errorhandler(404)
-    def not_found(e): return {"error": "Resource not found"}, 404
+    def not_found(e): return jsonify({"error": "Resource not found"}), 404
     @app.errorhandler(405)
-    def method_not_allowed(e): return {"error": "Method not allowed"}, 405
+    def method_not_allowed(e): return jsonify({"error": "Method not allowed"}), 405
     @app.errorhandler(500)
-    def server_error(e): return {"error": "Internal server error"}, 500
+    def server_error(e): return jsonify({"error": "Internal server error"}), 500
 
     return app
 
