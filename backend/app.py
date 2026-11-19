@@ -22,7 +22,8 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-    CORS(app, resources={r"/api/*": {"origins": app.config["FRONTEND_URL"]}, r"/uploads/*": {"origins": app.config["FRONTEND_URL"]}}, supports_credentials=True)
+    origins = [app.config.get("FRONTEND_URL", "*"), "*"]
+    CORS(app, resources={r"/api/*": {"origins": origins}, r"/uploads/*": {"origins": origins}}, supports_credentials=True)
     init_db(app)
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(users_bp, url_prefix="/api/users")
@@ -35,6 +36,11 @@ def create_app(config_class=Config):
     app.register_blueprint(compiler_bp, url_prefix="/api/compiler")
     app.register_blueprint(builder_bp, url_prefix="/api/builder")
     app.register_blueprint(ocr_bp, url_prefix="/api/ocr")
+
+    @app.get("/")
+    def index():
+        frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
+        return send_from_directory(frontend_dir, "index.html")
 
     @app.get("/uploads/<path:filename>")
     def serve_upload(filename):

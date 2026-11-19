@@ -1111,7 +1111,10 @@ a{text-decoration:none;color:inherit}
 </div>
 
 <script>
-const API = 'http://localhost:5000/api';
+const SERVER_HOST = (window.location.protocol === 'file:' || window.location.port === '3000' || window.location.port === '5500')
+  ? 'http://localhost:5000'
+  : window.location.origin;
+const API = `${SERVER_HOST}/api`;
 let token = localStorage.getItem('eg_token') || '';
 let currentUser = JSON.parse(localStorage.getItem('eg_user') || 'null');
 
@@ -3341,7 +3344,7 @@ const Staff = {
 
       if (scanUrl) {
         if (zoomControls) zoomControls.style.display = 'flex';
-        const fullUrl = (scanUrl.startsWith('http') ? '' : 'http://localhost:5000') + scanUrl;
+        const fullUrl = (scanUrl.startsWith('http') ? '' : SERVER_HOST) + scanUrl;
         if (openLink) openLink.href = fullUrl;
         const isPdf = scanUrl.toLowerCase().endsWith('.pdf');
         if (isPdf) {
@@ -3878,7 +3881,7 @@ const Staff = {
     let scanViewerHtml = '';
     const scannedUrl = sessionDetail?.scanned_file_url;
     if (scannedUrl) {
-      const serverHost = 'http://localhost:5000';
+      const serverHost = SERVER_HOST;
       const fullUrl = serverHost + scannedUrl;
       const isPdf = scannedUrl.toLowerCase().endsWith('.pdf');
       scanViewerHtml = `
