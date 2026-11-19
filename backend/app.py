@@ -41,20 +41,27 @@ def create_app(config_class=Config):
         frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
         return send_from_directory(frontend_dir, "index.html")
 
-    @app.get("/uploads/<path:filename>")
+    @app.route("/uploads/<path:filename>", methods=["GET"])
+    @app.route("/api/uploads/<path:filename>", methods=["GET"])
     def serve_upload(filename):
         clean_name = filename.strip("/\\")
         base_name = os.path.basename(clean_name)
 
         candidates = [
             app.config.get("UPLOAD_FOLDER"),
+            os.path.abspath(os.path.join(app.config.get("UPLOAD_FOLDER", ""), "scans")) if app.config.get("UPLOAD_FOLDER") else None,
             os.path.abspath(os.path.join(os.path.dirname(__file__), "uploads")),
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads")),
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "backend", "uploads")),
-            os.path.abspath(os.path.join(os.getcwd(), "uploads")),
-            os.path.abspath(os.path.join(os.getcwd(), "backend", "uploads")),
             os.path.abspath(os.path.join(os.path.dirname(__file__), "uploads", "scans")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads")),
             os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads", "scans")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "backend", "uploads")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "backend", "uploads", "scans")),
+            os.path.abspath(os.path.join(os.getcwd(), "uploads")),
+            os.path.abspath(os.path.join(os.getcwd(), "uploads", "scans")),
+            os.path.abspath(os.path.join(os.getcwd(), "backend", "uploads")),
+            os.path.abspath(os.path.join(os.getcwd(), "backend", "uploads", "scans")),
+            os.path.abspath(os.path.join(os.getcwd(), "backend", "backend", "uploads")),
+            os.path.abspath(os.path.join(os.getcwd(), "backend", "backend", "uploads", "scans")),
         ]
 
         found_path = None

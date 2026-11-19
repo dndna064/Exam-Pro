@@ -1,4 +1,4 @@
-import uuid, json, re, time, os
+import uuid, json, re, time, os, base64
 import urllib.request, urllib.error
 from datetime import datetime
 from flask import Blueprint, request, jsonify, current_app
@@ -6,6 +6,59 @@ from database import get_db
 from auth import token_required, roles_required
 
 sessions_bp = Blueprint("sessions", __name__)
+
+def _resolve_scan_file(scanned_url):
+    if not scanned_url:
+        return None
+    clean_name = scanned_url.strip("/\\")
+    base_name = os.path.basename(clean_name)
+    candidates = [
+        current_app.config.get("UPLOAD_FOLDER"),
+        os.path.abspath(os.path.join(current_app.config.get("UPLOAD_FOLDER", ""), "scans")) if current_app.config.get("UPLOAD_FOLDER") else None,
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads", "scans")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend", "uploads")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend", "uploads", "scans")),
+        os.path.abspath(os.path.join(os.getcwd(), "uploads")),
+        os.path.abspath(os.path.join(os.getcwd(), "uploads", "scans")),
+        os.path.abspath(os.path.join(os.getcwd(), "backend", "uploads")),
+        os.path.abspath(os.path.join(os.getcwd(), "backend", "uploads", "scans")),
+        os.path.abspath(os.path.join(os.getcwd(), "backend", "backend", "uploads")),
+        os.path.abspath(os.path.join(os.getcwd(), "backend", "backend", "uploads", "scans")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "uploads")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "uploads", "scans")),
+    ]
+    for c in candidates:
+        if not c:
+            continue
+        p1 = os.path.abspath(os.path.join(c, clean_name))
+        if os.path.isfile(p1):
+            return p1
+        p2 = os.path.abspath(os.path.join(c, base_name))
+        if os.path.isfile(p2):
+            return p2
+    return None
+
+def _get_scan_data_uri(scanned_url):
+    fpath = _resolve_scan_file(scanned_url)
+    if not fpath:
+        return None
+    try:
+        ext = os.path.splitext(fpath)[1].lower()
+        if ext == ".pdf":
+            mime = "application/pdf"
+        elif ext in (".png",):
+            mime = "image/png"
+        elif ext in (".webp",):
+            mime = "image/webp"
+        else:
+            mime = "image/jpeg"
+        with open(fpath, "rb") as f:
+            b64_content = base64.b64encode(f.read()).decode("utf-8")
+        return f"data:{mime};base64,{b64_content}"
+    except Exception as e:
+        print("Error reading scan file for data URI:", e)
+        return None
 
 @sessions_bp.post("/start")
 @token_required
@@ -64,7 +117,10 @@ def get_session(sid):
     cu = request.current_user
     if cu["role"] == "student" and row["student_id"] != cu["id"]:
         return jsonify({"error": "Forbidden"}), 403
-    return jsonify(dict(row))
+    sess_dict = dict(row)
+    if sess_dict.get("scanned_file_url"):
+        sess_dict["scanned_file_data"] = _get_scan_data_uri(sess_dict["scanned_file_url"])
+    return jsonify(sess_dict)
 
 @sessions_bp.put("/<sid>/heartbeat")
 @token_required
@@ -389,20 +445,9 @@ def prepare_eval(sid):
     existing_scan = db.execute("SELECT id FROM ocr_scans WHERE session_id=?", (sid,)).fetchone()
 
     if scanned_url and not existing_scan and desc_qs:
-        fname = os.path.basename(scanned_url)
-        fpath = os.path.join(current_app.config["UPLOAD_FOLDER"], "scans", fname)
-        if not os.path.exists(fpath):
-            for c in [
-                os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads", "scans")),
-                os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "uploads", "scans")),
-                os.path.abspath(os.path.join(os.getcwd(), "uploads", "scans")),
-                os.path.abspath(os.path.join(os.getcwd(), "backend", "uploads", "scans")),
-            ]:
-                cand = os.path.join(c, fname)
-                if os.path.exists(cand):
-                    fpath = cand
-                    break
-        if os.path.exists(fpath):
+        fpath = _resolve_scan_file(scanned_url)
+        if fpath and os.path.exists(fpath):
+            fname = os.path.basename(fpath)
             ext = os.path.splitext(fname)[1].lower()
             mime = "application/pdf" if ext == ".pdf" else "image/jpeg"
             try:
@@ -486,12 +531,18 @@ def prepare_eval(sid):
 
     res_row = db.execute("SELECT * FROM results WHERE session_id=?", (sid,)).fetchone()
 
+    scan_data = _get_scan_data_uri(scanned_url) if scanned_url else None
+    sess_dict = dict(sess)
+    sess_dict["scanned_file_data"] = scan_data
+
     return jsonify({
-        "session": dict(sess),
+        "session": sess_dict,
         "exam": dict(exam),
         "student": dict(student),
         "questions": questions_payload,
-        "result": dict(res_row) if res_row else None
+        "result": dict(res_row) if res_row else None,
+        "scanned_file_data": scan_data,
+        "scanned_file_url": scanned_url
     })
 
 

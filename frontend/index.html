@@ -1118,6 +1118,13 @@ const API = `${SERVER_HOST}/api`;
 let token = localStorage.getItem('eg_token') || '';
 let currentUser = JSON.parse(localStorage.getItem('eg_user') || 'null');
 
+function resolveScanUrl(url) {
+  if (!url) return '';
+  if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://')) return url;
+  const clean = url.replace(/^\/?(api\/)?(uploads\/)?/, '');
+  return `${API}/uploads/${clean}`;
+}
+
 async function api(method, path, body) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = 'Bearer ' + token;
@@ -3353,12 +3360,15 @@ const Staff = {
     try {
       const data = await POST('/sessions/' + sessionId + '/prepare-eval');
       showLoader(false);
+      const scanData = data.scanned_file_data || data.session?.scanned_file_data || null;
+      const scanUrl = data.session?.scanned_file_url || data.scanned_file_url || null;
       this.currentEval = {
         session: data.session,
         exam: data.exam,
         student: data.student,
         questions: data.questions || [],
-        scanned_file_url: data.session?.scanned_file_url || data.scanned_file_url || null,
+        scanned_file_url: scanUrl,
+        scanned_file_data: scanData,
         scanZoom: 1
       };
       this.evalQIndex = 0;
@@ -3370,21 +3380,20 @@ const Staff = {
       el('em-publish-btn').textContent = `🚀 Publish Result to ${data.student.name.split(' ')[0]}'s Dashboard`;
 
       // Populate Left Pane (Scan)
-      const scanUrl = this.currentEval.scanned_file_url;
       const leftContent = el('em-scan-content');
       const zoomControls = el('em-zoom-controls');
       const openLink = el('em-open-scan-link');
 
-      if (scanUrl) {
+      if (scanData || scanUrl) {
         if (zoomControls) zoomControls.style.display = 'flex';
-        const serverBase = API.replace(/\/api\/?$/, '');
-        const fullUrl = (scanUrl.startsWith('http') ? '' : serverBase) + scanUrl;
-        if (openLink) openLink.href = fullUrl;
-        const isPdf = scanUrl.toLowerCase().endsWith('.pdf');
+        const fullUrl = resolveScanUrl(scanUrl);
+        const displaySrc = scanData || fullUrl;
+        if (openLink) openLink.href = fullUrl || displaySrc;
+        const isPdf = (scanUrl || '').toLowerCase().endsWith('.pdf') || (scanData || '').startsWith('data:application/pdf');
         if (isPdf) {
-          leftContent.innerHTML = `<iframe id="em-scan-frame" src="${fullUrl}" style="width:100%;height:100%;border:none;background:#fff"></iframe>`;
+          leftContent.innerHTML = `<iframe id="em-scan-frame" src="${displaySrc}" style="width:100%;height:100%;border:none;background:#fff"></iframe>`;
         } else {
-          leftContent.innerHTML = `<div style="overflow:auto;width:100%;height:100%;display:flex;align-items:flex-start;justify-content:center;padding:1rem"><img id="em-scan-img" src="${fullUrl}" style="max-width:100%;border-radius:6px;box-shadow:0 4px 15px rgba(0,0,0,.3);transition:transform 0.15s ease;transform-origin:top center;" onerror="this.outerHTML='<div style=\\'padding:2rem;text-align:center;color:#ef4444\\'>Failed to load scan image.<br><a href=\\'${fullUrl}\\' target=\\'_blank\\' style=\\'color:#38bdf8;text-decoration:underline;margin-top:.5rem;display:inline-block\\'>Open scan in new tab ↗</a></div>'" /></div>`;
+          leftContent.innerHTML = `<div style="overflow:auto;width:100%;height:100%;display:flex;align-items:flex-start;justify-content:center;padding:1rem"><img id="em-scan-img" src="${displaySrc}" style="max-width:100%;border-radius:6px;box-shadow:0 4px 15px rgba(0,0,0,.3);transition:transform 0.15s ease;transform-origin:top center;" onerror="this.outerHTML='<div style=\\'padding:2rem;text-align:center;color:#ef4444\\'>Failed to load scan image.<br><a href=\\'${fullUrl}\\' target=\\'_blank\\' style=\\'color:#38bdf8;text-decoration:underline;margin-top:.5rem;display:inline-block\\'>Open scan in new tab ↗</a></div>'" /></div>`;
         }
       } else {
         if (zoomControls) zoomControls.style.display = 'none';
@@ -3914,10 +3923,11 @@ const Staff = {
 
     let scanViewerHtml = '';
     const scannedUrl = sessionDetail?.scanned_file_url;
-    if (scannedUrl) {
-      const serverHost = API.replace(/\/api\/?$/, '');
-      const fullUrl = (scannedUrl.startsWith('http') ? '' : serverHost) + scannedUrl;
-      const isPdf = scannedUrl.toLowerCase().endsWith('.pdf');
+    const scannedData = sessionDetail?.scanned_file_data;
+    if (scannedUrl || scannedData) {
+      const fullUrl = resolveScanUrl(scannedUrl);
+      const displaySrc = scannedData || fullUrl;
+      const isPdf = (scannedUrl || '').toLowerCase().endsWith('.pdf') || (scannedData || '').startsWith('data:application/pdf');
       scanViewerHtml = `
         <div style="margin-bottom:1.5rem;padding:1rem;background:#f0f9ff;border:2px solid #38bdf8;border-radius:10px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem;flex-wrap:wrap;gap:.5rem">
@@ -3925,13 +3935,13 @@ const Staff = {
               <span style="font-weight:700;color:#0369a1;font-size:.95rem">📄 Uploaded Handwritten Answer Sheet</span>
               <span style="color:#64748b;font-size:.78rem;margin-left:.5rem">(Scan submitted by student)</span>
             </div>
-            <a href="${fullUrl}" target="_blank" style="padding:.35rem .75rem;background:#0284c7;color:#fff;border-radius:6px;font-size:.78rem;font-weight:600;text-decoration:none">🔍 Open Full Scan in New Tab</a>
+            <a href="${fullUrl || displaySrc}" target="_blank" style="padding:.35rem .75rem;background:#0284c7;color:#fff;border-radius:6px;font-size:.78rem;font-weight:600;text-decoration:none">🔍 Open Full Scan in New Tab</a>
           </div>
           ${isPdf ? `
-            <iframe src="${fullUrl}" style="width:100%;height:500px;border:1px solid #cbd5e1;border-radius:8px"></iframe>
+            <iframe src="${displaySrc}" style="width:100%;height:500px;border:1px solid #cbd5e1;border-radius:8px"></iframe>
           ` : `
             <div style="background:#0f172a;border-radius:8px;padding:.5rem;text-align:center;overflow:auto">
-              <img src="${fullUrl}" style="max-height:500px;max-width:100%;object-fit:contain;cursor:zoom-in" onclick="window.open(this.src,'_blank')" title="Click to view full size">
+              <img src="${displaySrc}" style="max-height:500px;max-width:100%;object-fit:contain;cursor:zoom-in" onclick="window.open('${fullUrl || displaySrc}','_blank')" title="Click to view full size">
             </div>
           `}
         </div>`;
