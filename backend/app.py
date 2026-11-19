@@ -22,8 +22,7 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-    origins = [app.config.get("FRONTEND_URL", "*"), "*"]
-    CORS(app, resources={r"/api/*": {"origins": origins}, r"/uploads/*": {"origins": origins}}, supports_credentials=True)
+    CORS(app, supports_credentials=True)
     init_db(app)
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(users_bp, url_prefix="/api/users")
